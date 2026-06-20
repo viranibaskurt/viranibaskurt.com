@@ -1,105 +1,56 @@
 #ifdef GL_ES
-precision mediump float;
+precision highp float;
 #endif
-
-//https://www.grid-type.com/
-//https://www.4rknova.com/blog/2025/09/21/blob-3d
 
 uniform float u_time;
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
+uniform sampler2D u_smile;
 
-#define CI vec3(.3,.5,.6)
-#define CO vec3(.2)
-#define CM vec3(.0)
-#define CE vec3(.8,.7,.5)
+const float COUNT_X  = 70.0;  // number of circles horizontally
+const float COUNT_Y  = 40.0;  // number of circles vertically
+const float FILL_MIN = 2.1;   // circle size in white areas (fraction of cell half-size)
+const float FILL_MAX = 4.0;  // circle size in dark areas (fraction of cell half-size)
 
-const int NUM_LETTERS = 6;
-const int GRID_SIZE_X=3;
-const int GRID_SIZE_Y=3;
-const int GAP_SIZE=1;
-
-float circle(vec2 uv,vec2 c,float r)
+float circle(vec2 c, float r)
 {
-    return 1.0-step(r,distance(uv,c));
+    return 1.0 - step(r, length(gl_FragCoord.xy - c));
 }
 
-float metaball(vec2 p, float r) {
-    return r / max(dot(p, p), 0.000001);
+float metaball2d(vec2 p, float r)
+{
+    return 1.0 / dot(p, p) * r;
 }
 
-// Returns 1.0 if the cell is ON, 0.0 if OFF
-// Edit the grid comments to change each letter shape:
-// col:  0 1 2
-float getCell(int letter, int row, int col) {
-    // V:  1 0 1
-    //     1 0 1
-    //     0 1 0
-    if (letter == 0) {
-        if (row == 0 && (col == 0 || col == 2)) return 1.0;
-        if (row == 1 && (col == 0 || col == 2)) return 1.0;
-        if (row == 2 &&  col == 1)              return 1.0;
-        return 0.0;
-    }
-    // i:  0 1 0
-    //     0 1 0
-    //     0 1 0
-    if (letter == 1 || letter == 5) {
-        if (col == 1) return 1.0;
-        return 0.0;
-    }
-    // r:  0 1 1
-    //     0 1 0
-    //     0 1 0
-    if (letter == 2) {
-        if (col == 1) return 1.0;
-        if (row == 0 && col == 2) return 1.0;
-        return 0.0;
-    }
-    // a:  0 1 1
-    //     1 0 1
-    //     0 1 1
-    if (letter == 3) {
-        if (row == 0 && (col == 1 || col == 2)) return 1.0;
-        if (row == 1 && (col == 0 || col == 2)) return 1.0;
-        if (row == 2 && (col == 1 || col == 2)) return 1.0;
-        return 0.0;
-    }
-    // n:  1 1 1
-    //     1 0 1
-    //     1 0 1
-    if (letter == 4) {
-        if (row == 0) return 1.0;
-        if (col == 0 || col == 2) return 1.0;
-        return 0.0;
-    }
-
-    return 0.0;
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
 void main() {
-    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
-    uv -= 0.5;
-    uv.x *= u_resolution.x / u_resolution.y;
+    vec2 cell = u_resolution / vec2(COUNT_X, COUNT_Y);
+    float col = floor(gl_FragCoord.x / cell.x);
+    float colOffset = mod(col, 2.0) * 0.5 * cell.y;
+    vec2 cell_id = vec2(col, floor((gl_FragCoord.y - colOffset) / cell.y));
+    float halfCell = min(cell.x, cell.y) * 0.5;
 
-    // Each cell is cellSize units wide/tall.
-    // Each letter is 3 cols wide + 1 col gap = 4 cols per letter.
-    // Total x span: 6 letters * 4 - 1 gap = 23 cols → center at col 11.
-    const float cellSize = 0.06;
-    float center=(float(NUM_LETTERS)*float(GRID_SIZE_X+GAP_SIZE) -1.0)  * 0.5;
-    float energy = 0.0;
-    for (int l = 0; l < NUM_LETTERS; l++) {
-        for (int row = 0; row < GRID_SIZE_Y; row++) {
-            for (int col = 0; col < GRID_SIZE_X; col++) {
-                if (getCell(l, row, col) > 0.5) {
-                    float cx = (float(l) * float(GRID_SIZE_X+GAP_SIZE) + float(col) - center) * cellSize;
-                    float cy = (1.0 - float(row)) * cellSize;
-                    energy += metaball(uv - vec2(cx, cy), 0.00006*fract(sin(u_time)));
-                }
-            }
+    float field = 0.0;
+    for (int ix = -5; ix <= 5; ix++) {
+        for (int iy = -5; iy <= 5; iy++) {
+            vec2 nid = cell_id + vec2(ix, iy);
+            float nColOffset = mod(nid.x, 2.0) * 0.5 * cell.y;
+            vec2 center = vec2((nid.x + 0.5) * cell.x, (nid.y + 0.5) * cell.y + nColOffset);
+            vec2 uv = vec2(center.x, u_resolution.y - center.y) / u_resolution;
+            float brightness = dot(texture2D(u_smile, uv).rgb, vec3(0.6, 0.6, 0.7));
+            float morph = 1.0 - brightness;
+            float rnd = hash(nid);
+            float sinScale = 1.0 + sin(u_time * (0.9 + rnd) + rnd * 6.2831) * 0.5 * morph;
+            float radius = halfCell * mix(FILL_MAX, FILL_MIN, brightness) * sinScale;
+            field += metaball2d(center - gl_FragCoord.xy, radius);
         }
     }
 
-    vec3 clr = vec3(step(0.1, energy)) * CE;
-    gl_FragColor = vec4(clamp(clr, 0.0, 1.0), 1.0);
+    float mask = smoothstep(0.95, 1.05, field);
+    vec3 dotColor = vec3(0.2, 0.4, 0.8);
+    vec3 bgColor  = vec3(1.0);
+    gl_FragColor = vec4(mix(bgColor, dotColor, mask), 1.0);
 }
