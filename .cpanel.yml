@@ -1,0 +1,10 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/$USER/public_html
+    - /bin/cp index.html $DEPLOYPATH/
+    - /bin/cp style.css $DEPLOYPATH/
+    - /bin/cp nav.js $DEPLOYPATH/
+    - /bin/cp webgl.js $DEPLOYPATH/
+    - /bin/mkdir -p $DEPLOYPATH/shaders
+    - /bin/cp shaders/* $DEPLOYPATH/shaders/
