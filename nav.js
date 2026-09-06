@@ -1,6 +1,14 @@
 const nav = document.createElement('nav');
 nav.innerHTML = `
     <a href="/">About</a>
+    <div class="dropdown">
+        <a href="#" class="dropdown-toggle">Projects</a>
+        <div class="dropdown-menu">
+            <a href="/generative_art/">Generative Art</a>
+            <a href="/juggling/">Juggling</a>
+            <a href="/lost_and_found/">Lost and Found</a>
+        </div>
+    </div>
 `;
 document.body.prepend(nav);
 

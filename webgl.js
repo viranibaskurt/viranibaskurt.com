@@ -47,28 +47,30 @@ function createFBO(gl, width, height) {
     return { fbo, texture };
 }
 
-function createTextTexture(gl, text) {
-    const size = 1024;
-    const offscreen = document.createElement('canvas');
-    offscreen.width = size * 2;
-    offscreen.height = size;
-    const ctx = offscreen.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, offscreen.width, offscreen.height);
-    ctx.fillStyle = '#000000';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = `bold ${size * 0.26}px sans-serif`;
-    ctx.fillText(text, offscreen.width / 2, offscreen.height / 2);
+function createVideoElement(src) {
+    const video = document.createElement('video');
+    video.src = src;
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.autoplay = true;
+    return video;
+}
 
+function createVideoTexture(gl) {
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, offscreen);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return texture;
+}
 
-    return { texture, canvas: offscreen };
+function updateVideoTexture(gl, texture, video) {
+    if (video.readyState < video.HAVE_CURRENT_DATA) return;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
 }
 
 async function main() {
@@ -84,11 +86,13 @@ async function main() {
 
     const [vertSrc, circlesSrc, outputSrc] = await Promise.all([
         fetchShader('shaders/passthrough.vert'),
-        fetchShader('shaders/circles.frag'),
+        fetchShader('shaders/metaball_renderer.frag'),
         fetchShader('shaders/output.frag'),
     ]);
 
-    const { texture: smileTexture } = createTextTexture(gl, 'COMING SOON');
+    const smileVideo = createVideoElement('jump_test.mp4');
+    await smileVideo.play().catch(() => {});
+    const smileTexture = createVideoTexture(gl);
 
     const circlesProgram = createProgram(gl, vertSrc, circlesSrc);
     const outputProgram = createProgram(gl, vertSrc, outputSrc);
@@ -131,7 +135,7 @@ async function main() {
         gl.uniform1f(gl.getUniformLocation(circlesProgram, 'u_time'), time);
         gl.uniform2f(gl.getUniformLocation(circlesProgram, 'u_resolution'), width, height);
         gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, smileTexture);
+        updateVideoTexture(gl, smileTexture, smileVideo);
         gl.uniform1i(gl.getUniformLocation(circlesProgram, 'u_smile'), 1);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
 
