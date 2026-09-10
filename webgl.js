@@ -73,6 +73,219 @@ function updateVideoTexture(gl, texture, video) {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
 }
 
+const DEBUG = true;
+const DEBUG_STORAGE_KEY = 'metaball-debug-params';
+
+const DEFAULT_PARAMS = {
+    dotCount: [100, 60],
+    rMax: 5 * 0.00001,
+    rMin: 2 * 0.00001,
+    sumThresholdMin: 0.0,
+    sumThresholdMax: 3.0,
+    saturation: [0.5, 0.5, 0.5],
+    backgroundColor: [0, 0, 0],
+    dotColor: [1, 1, 1],
+};
+
+function loadParams() {
+    const params = JSON.parse(JSON.stringify(DEFAULT_PARAMS));
+    try {
+        const saved = JSON.parse(localStorage.getItem(DEBUG_STORAGE_KEY));
+        for (const key in params) {
+            if (!saved || !(key in saved)) continue;
+            if (Array.isArray(params[key])) {
+                saved[key].forEach((v, i) => {
+                    if (typeof v === 'number') params[key][i] = v;
+                });
+            } else if (typeof saved[key] === 'number') {
+                params[key] = saved[key];
+            }
+        }
+    } catch (e) {}
+    return params;
+}
+
+function saveParams(params) {
+    try {
+        localStorage.setItem(DEBUG_STORAGE_KEY, JSON.stringify(params));
+    } catch (e) {}
+}
+
+function createDebugPanel(params) {
+    const panel = document.createElement('div');
+    panel.style.cssText = `
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 1000;
+        background: rgba(0, 0, 0, 0.75);
+        color: #fff;
+        font: 12px monospace;
+        border-radius: 6px;
+        padding: 8px 10px;
+        max-width: 260px;
+        user-select: none;
+    `;
+
+    const header = document.createElement('div');
+    header.textContent = '▾ debug';
+    header.style.cssText = 'cursor: pointer; font-weight: bold; margin-bottom: 6px;';
+
+    const content = document.createElement('div');
+
+    header.addEventListener('click', () => {
+        const collapsed = content.style.display === 'none';
+        content.style.display = collapsed ? 'block' : 'none';
+        header.textContent = (collapsed ? '▾' : '▸') + ' debug';
+    });
+
+    function addSlider(label, min, max, step, defaultValue, getValue, setValue, opts = {}) {
+        const {
+            format = v => v,
+            toDisplay = v => v,
+            fromDisplay = v => v,
+        } = opts;
+
+        const row = document.createElement('div');
+        row.style.cssText = 'margin-bottom: 6px;';
+
+        const labelRow = document.createElement('div');
+        labelRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 8px;';
+        const labelEl = document.createElement('span');
+        labelEl.textContent = label;
+
+        const valueGroup = document.createElement('span');
+        valueGroup.style.cssText = 'display: flex; align-items: center; gap: 4px;';
+        const valueEl = document.createElement('span');
+
+        const revertBtn = document.createElement('span');
+        revertBtn.textContent = '↺';
+        revertBtn.title = 'Reset to default';
+        revertBtn.style.cssText = 'cursor: pointer; visibility: hidden;';
+
+        valueGroup.appendChild(valueEl);
+        valueGroup.appendChild(revertBtn);
+        labelRow.appendChild(labelEl);
+        labelRow.appendChild(valueGroup);
+
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = min;
+        input.max = max;
+        input.step = step;
+
+        function refresh() {
+            const display = toDisplay(getValue());
+            input.value = display;
+            valueEl.textContent = format(display);
+            revertBtn.style.visibility = getValue() !== defaultValue ? 'visible' : 'hidden';
+        }
+
+        input.addEventListener('input', () => {
+            setValue(fromDisplay(parseFloat(input.value)));
+            refresh();
+            saveParams(params);
+        });
+
+        revertBtn.addEventListener('click', () => {
+            setValue(defaultValue);
+            refresh();
+            saveParams(params);
+        });
+
+        refresh();
+
+        row.appendChild(labelRow);
+        row.appendChild(input);
+        content.appendChild(row);
+    }
+
+    function addColorPicker(label, defaultValue, getValue, setValue) {
+        const toHex = c => '#' + c.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
+        const fromHex = hex => [
+            parseInt(hex.slice(1, 3), 16) / 255,
+            parseInt(hex.slice(3, 5), 16) / 255,
+            parseInt(hex.slice(5, 7), 16) / 255,
+        ];
+
+        const row = document.createElement('div');
+        row.style.cssText = 'margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px;';
+
+        const labelEl = document.createElement('span');
+        labelEl.textContent = label;
+
+        const controls = document.createElement('span');
+        controls.style.cssText = 'display: flex; align-items: center; gap: 4px;';
+
+        const input = document.createElement('input');
+        input.type = 'color';
+        input.style.cssText = 'width: 28px; height: 20px; padding: 0; border: none; background: none; cursor: pointer;';
+
+        const revertBtn = document.createElement('span');
+        revertBtn.textContent = '↺';
+        revertBtn.title = 'Reset to default';
+        revertBtn.style.cssText = 'cursor: pointer; visibility: hidden;';
+
+        function refresh() {
+            input.value = toHex(getValue());
+            revertBtn.style.visibility = toHex(getValue()) !== toHex(defaultValue) ? 'visible' : 'hidden';
+        }
+
+        input.addEventListener('input', () => {
+            setValue(fromHex(input.value));
+            refresh();
+            saveParams(params);
+        });
+
+        revertBtn.addEventListener('click', () => {
+            setValue(defaultValue.slice());
+            refresh();
+            saveParams(params);
+        });
+
+        refresh();
+
+        controls.appendChild(input);
+        controls.appendChild(revertBtn);
+        row.appendChild(labelEl);
+        row.appendChild(controls);
+        content.appendChild(row);
+    }
+
+    const scaledRadius = {
+        toDisplay: v => Math.round(v / 0.00001),
+        fromDisplay: v => v * 0.00001,
+        format: v => Math.round(v),
+    };
+
+    addSlider('dotCount.x', 0, 300, 1, DEFAULT_PARAMS.dotCount[0],
+        () => params.dotCount[0], v => { params.dotCount[0] = v; });
+    addSlider('dotCount.y', 0, 300, 1, DEFAULT_PARAMS.dotCount[1],
+        () => params.dotCount[1], v => { params.dotCount[1] = v; });
+    addSlider('rMax', 0, 100, 1, DEFAULT_PARAMS.rMax,
+        () => params.rMax, v => { params.rMax = v; }, scaledRadius);
+    addSlider('rMin', 0, 100, 1, DEFAULT_PARAMS.rMin,
+        () => params.rMin, v => { params.rMin = v; }, scaledRadius);
+    addSlider('sumThresholdMin', 0, 5, 0.01, DEFAULT_PARAMS.sumThresholdMin,
+        () => params.sumThresholdMin, v => { params.sumThresholdMin = v; });
+    addSlider('sumThresholdMax', 0, 5, 0.01, DEFAULT_PARAMS.sumThresholdMax,
+        () => params.sumThresholdMax, v => { params.sumThresholdMax = v; });
+    addSlider('saturation.r', 0, 1, 0.01, DEFAULT_PARAMS.saturation[0],
+        () => params.saturation[0], v => { params.saturation[0] = v; });
+    addSlider('saturation.g', 0, 1, 0.01, DEFAULT_PARAMS.saturation[1],
+        () => params.saturation[1], v => { params.saturation[1] = v; });
+    addSlider('saturation.b', 0, 1, 0.01, DEFAULT_PARAMS.saturation[2],
+        () => params.saturation[2], v => { params.saturation[2] = v; });
+    addColorPicker('backgroundColor', DEFAULT_PARAMS.backgroundColor,
+        () => params.backgroundColor, v => { params.backgroundColor = v; });
+    addColorPicker('dotColor', DEFAULT_PARAMS.dotColor,
+        () => params.dotColor, v => { params.dotColor = v; });
+
+    panel.appendChild(header);
+    panel.appendChild(content);
+    document.body.appendChild(panel);
+}
+
 async function main() {
     const canvas = document.getElementById('glcanvas');
     const gl = canvas.getContext('webgl');
@@ -104,6 +317,9 @@ async function main() {
         -1, -1,  1, -1,  -1,  1,
         -1,  1,  1, -1,   1,  1,
     ]), gl.STATIC_DRAW);
+
+    const params = loadParams();
+    if (DEBUG) createDebugPanel(params);
 
     let currentFBO = createFBO(gl, canvas.width, canvas.height);
 
@@ -137,8 +353,18 @@ async function main() {
         gl.activeTexture(gl.TEXTURE1);
         updateVideoTexture(gl, smileTexture, smileVideo);
         gl.uniform1i(gl.getUniformLocation(circlesProgram, 'u_smile'), 1);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        
+        gl.uniform2i(gl.getUniformLocation(circlesProgram,'u_dotCount'),params.dotCount[0],params.dotCount[1]);
+        gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_rMax'),params.rMax);
+        gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_rMin'),params.rMin);
+        gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_sumThresholdMin'),params.sumThresholdMin);
+        gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_sumThresholdMax'),params.sumThresholdMax);
+        gl.uniform3f(gl.getUniformLocation(circlesProgram,'u_saturation'),params.saturation[0],params.saturation[1],params.saturation[2]);
+        gl.uniform3f(gl.getUniformLocation(circlesProgram,'u_backgroundColor'),params.backgroundColor[0],params.backgroundColor[1],params.backgroundColor[2]);
+        gl.uniform3f(gl.getUniformLocation(circlesProgram,'u_dotColor'),params.dotColor[0],params.dotColor[1],params.dotColor[2]);
 
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        
         // --- Pass 2: render FBO texture to screen ---
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, width, height);
