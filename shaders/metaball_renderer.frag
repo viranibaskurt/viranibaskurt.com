@@ -16,6 +16,7 @@ uniform vec3 u_saturation;
 uniform vec3 u_backgroundColor;
 uniform vec3 u_dotColor;
 
+// #define OneOverDotCount vec2(1.0)/vec2(u_dotCount)
 // const ivec2 DOT_COUNT = ivec2(100,60);
 // const float R_MAX = 0.00005;
 // const float R_MIN = 0.00002;
@@ -35,6 +36,48 @@ float metaball2d(vec2 p, float r)
     return 1.0 / dot(p, p) * r;
 }
 
+float metaball2d_2(float pSquare,float r)
+{
+    return 1.0 / (pSquare) * r;
+}
+
+float dotDistToLine(vec2 P1,vec2 P2,vec2 Pt)
+{
+    vec2 e1=P2-P1;
+    vec2 e2=Pt-P1;
+    float recArea=dot(e1,e1);
+    float val=dot(e1,e2);
+    float fraction=clamp(val/recArea,0.0,1.0);
+    vec2 fractionOnLine=P1+e1*fraction;
+
+    vec2 diff=Pt-fractionOnLine;
+    return dot(diff,diff);
+
+    //https://www.sunshine2k.de/coding/java/PointOnLine/PointOnLine.html
+    // vec2 e1=P2-P1;
+    // vec2 e2=Pt-P1;
+    // float recArea=dot(e1,e1);
+    // float val=dot(e1,e2);
+
+    // float isLineOnSegment=float(val>0.0 && val<recArea);
+
+    // float A = P2.y-P1.y;
+    // float B = P2.x-P1.x;
+    // float C = P1.x * P2.y - P1.y * P2.x;
+
+    // float distToLine= abs(-A * Pt.x + B * Pt.y + C) / sqrt( A*A + B*B );
+    // return isLineOnSegment*distToLine;
+}
+
+vec2 cellToUv(ivec2 center,vec2 OneOverDotCount)
+{
+    vec2 centerUV=vec2(center)*OneOverDotCount;
+
+    centerUV.x += -OneOverDotCount.x * 0.5 +( mod(float(center.y),2.0)*OneOverDotCount.x * 0.5);
+    centerUV.y += OneOverDotCount.y * 0.5;
+    return centerUV;
+}
+
 void main(){
     vec2 uv = gl_FragCoord.xy / u_resolution.xy;
     vec2 ratio=vec2(u_resolution.x/u_resolution.y,1.0);
@@ -45,31 +88,43 @@ void main(){
 
     ivec2 currentCircle = ivec2(floor(uv * vec2(u_dotCount)));
 
-    float field = 0.0;
+    float field1 = 0.0;
+    float field2 = 0.0;
+
     for(int x = -NeighborEffect.x; x<= NeighborEffect.x; ++x)
     {
         for(int y = -NeighborEffect.y; y<= NeighborEffect.y; ++y)
         {
             ivec2 center = currentCircle+ivec2(x,y);
-            vec2 centerUV=vec2(center)*OneOverDotCount;
+            vec2 centerUV=cellToUv(center,OneOverDotCount);
+            vec2 leftUpUv=cellToUv(center+ivec2(-1,+1),OneOverDotCount);
+            vec2 rightUpUv=cellToUv(center+ivec2(+1,+1),OneOverDotCount);
+            float distToLine1=dotDistToLine(leftUpUv,centerUV,uv);
+            float distToLine2=dotDistToLine(rightUpUv,centerUV,uv);
 
-            centerUV += OneOverDotCount * vec2(0.5);
+
             vec2 flippedCenterUV=vec2(centerUV.x,1.0-centerUV.y);
             vec3 sampledTexture = texture2D(u_smile, flippedCenterUV).rgb;
             float dot = dot(sampledTexture,u_saturation);
 
             float r = mix(u_rMax, u_rMin, dot);
-            float effect = 1.0-smoothstep(0.2,1.0,length(vec2(center-currentCircle)/vec2(NeighborEffect)));
+            float dist=length(vec2(center-currentCircle)/vec2(NeighborEffect));
+            float effect = 1.0-smoothstep(0.2,1.0,dist);
             
             vec2 scaledCenterUV= centerUV * ratio;
-            field += metaball2d( scaledCenterUV - scaledUV , r)*effect;
+            //field += metaball2d( scaledCenterUV - scaledUV , r)*effect;
+            field1 += metaball2d_2( distToLine1,r)*effect;
+            field2 += metaball2d_2( distToLine2,r)*effect;
 
         }
     }
-    field= smoothstep(u_sumThresholdMin,u_sumThresholdMax,field);
+    float field= smoothstep(u_sumThresholdMin,u_sumThresholdMax,field1+field2);
 
     vec3 finalColor=mix(u_backgroundColor,u_dotColor,field);
     gl_FragColor = vec4(finalColor, 1.0);
+
+    //gl_FragColor=(vec4(field2,field2,field2,1.0));
+    
 }
 
 /*

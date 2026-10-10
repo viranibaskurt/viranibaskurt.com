@@ -77,6 +77,7 @@ const DEBUG = true;
 const DEBUG_STORAGE_KEY = 'metaball-debug-params';
 
 const DEFAULT_PARAMS = {
+    speed: 1,
     dotCount: [100, 60],
     rMax: 5 * 0.00001,
     rMin: 2 * 0.00001,
@@ -111,7 +112,7 @@ function saveParams(params) {
     } catch (e) {}
 }
 
-function createDebugPanel(params) {
+function createDebugPanel(params, playState) {
     const panel = document.createElement('div');
     panel.style.cssText = `
         position: fixed;
@@ -132,6 +133,32 @@ function createDebugPanel(params) {
     header.style.cssText = 'cursor: pointer; font-weight: bold; margin-bottom: 6px;';
 
     const content = document.createElement('div');
+
+    const playPauseBtn = document.createElement('button');
+    playPauseBtn.style.cssText = `
+        display: block;
+        width: 100%;
+        cursor: pointer;
+        background: #333;
+        color: #fff;
+        border: 1px solid #555;
+        border-radius: 4px;
+        padding: 3px 8px;
+        font: 12px monospace;
+        margin-bottom: 8px;
+    `;
+    function refreshPlayPauseBtn() {
+        playPauseBtn.textContent = playState.playing ? '⏸ pause' : '▶ play';
+    }
+    playPauseBtn.addEventListener('click', () => {
+        playState.playing = !playState.playing;
+        refreshPlayPauseBtn();
+    });
+    refreshPlayPauseBtn();
+    content.appendChild(playPauseBtn);
+
+    addSlider('speed', 0, 3, 0.1, DEFAULT_PARAMS.speed,
+        () => params.speed, v => { params.speed = v; }, { format: v => v.toFixed(1) + 'x' });
 
     header.addEventListener('click', () => {
         const collapsed = content.style.display === 'none';
@@ -319,7 +346,8 @@ async function main() {
     ]), gl.STATIC_DRAW);
 
     const params = loadParams();
-    if (DEBUG) createDebugPanel(params);
+    const playState = { playing: true };
+    if (DEBUG) createDebugPanel(params, playState);
 
     let currentFBO = createFBO(gl, canvas.width, canvas.height);
 
@@ -328,7 +356,9 @@ async function main() {
         currentFBO = createFBO(gl, canvas.width, canvas.height);
     });
 
-    const startTime = performance.now();
+    let animTime = 0;
+    let lastTimestamp = null;
+    let wasPlaying = playState.playing;
 
     function bindQuad(program) {
         const loc = gl.getAttribLocation(program, 'a_position');
@@ -337,8 +367,20 @@ async function main() {
         gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     }
 
-    function render() {
-        const time = (performance.now() - startTime) / 1000;
+    function render(now) {
+        if (lastTimestamp === null) lastTimestamp = now;
+        const dt = now - lastTimestamp;
+        lastTimestamp = now;
+        if (playState.playing) animTime += dt * params.speed;
+
+        if (playState.playing !== wasPlaying) {
+            wasPlaying = playState.playing;
+            if (playState.playing) smileVideo.play().catch(() => {});
+            else smileVideo.pause();
+        }
+        smileVideo.playbackRate = params.speed || 0.0625;
+
+        const time = animTime / 1000;
         const { fbo, texture } = currentFBO;
         const width = canvas.width;
         const height = canvas.height;
@@ -379,7 +421,7 @@ async function main() {
         requestAnimationFrame(render);
     }
 
-    render();
+    requestAnimationFrame(render);
 }
 
 main();
