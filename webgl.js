@@ -86,6 +86,9 @@ const DEFAULT_PARAMS = {
     saturation: [0.5, 0.5, 0.5],
     backgroundColor: [0, 0, 0],
     dotColor: [1, 1, 1],
+    cellSize:100,
+    minDotSizeInCell:0.1,
+    maxDotSizeInCell:0.5,
 };
 
 function loadParams() {
@@ -285,28 +288,39 @@ function createDebugPanel(params, playState) {
         format: v => Math.round(v),
     };
 
-    addSlider('dotCount.x', 0, 300, 1, DEFAULT_PARAMS.dotCount[0],
-        () => params.dotCount[0], v => { params.dotCount[0] = v; });
-    addSlider('dotCount.y', 0, 300, 1, DEFAULT_PARAMS.dotCount[1],
-        () => params.dotCount[1], v => { params.dotCount[1] = v; });
-    addSlider('rMax', 0, 100, 1, DEFAULT_PARAMS.rMax,
-        () => params.rMax, v => { params.rMax = v; }, scaledRadius);
-    addSlider('rMin', 0, 100, 1, DEFAULT_PARAMS.rMin,
-        () => params.rMin, v => { params.rMin = v; }, scaledRadius);
-    addSlider('sumThresholdMin', 0, 5, 0.01, DEFAULT_PARAMS.sumThresholdMin,
-        () => params.sumThresholdMin, v => { params.sumThresholdMin = v; });
-    addSlider('sumThresholdMax', 0, 5, 0.01, DEFAULT_PARAMS.sumThresholdMax,
-        () => params.sumThresholdMax, v => { params.sumThresholdMax = v; });
-    addSlider('saturation.r', 0, 1, 0.01, DEFAULT_PARAMS.saturation[0],
-        () => params.saturation[0], v => { params.saturation[0] = v; });
-    addSlider('saturation.g', 0, 1, 0.01, DEFAULT_PARAMS.saturation[1],
-        () => params.saturation[1], v => { params.saturation[1] = v; });
-    addSlider('saturation.b', 0, 1, 0.01, DEFAULT_PARAMS.saturation[2],
-        () => params.saturation[2], v => { params.saturation[2] = v; });
-    addColorPicker('backgroundColor', DEFAULT_PARAMS.backgroundColor,
-        () => params.backgroundColor, v => { params.backgroundColor = v; });
-    addColorPicker('dotColor', DEFAULT_PARAMS.dotColor,
-        () => params.dotColor, v => { params.dotColor = v; });
+    addSlider('cellSize',0,200,1,DEFAULT_PARAMS.cellSize,
+        ()=> params.cellSize,v=>{params.cellSize=v;}
+    )
+    addSlider('minDotSizeInCell',0,1,0.1,DEFAULT_PARAMS.minDotSizeInCell,
+        ()=> params.minDotSizeInCell,v=>{params.minDotSizeInCell=v;}
+    )
+    addSlider('maxDotSizeInCell',0,1,0.1,DEFAULT_PARAMS.maxDotSizeInCell,
+        ()=> params.maxDotSizeInCell,v=>{params.maxDotSizeInCell=v;}
+    )
+
+
+    // addSlider('dotCount.x', 0, 300, 1, DEFAULT_PARAMS.dotCount[0],
+    //     () => params.dotCount[0], v => { params.dotCount[0] = v; });
+    // addSlider('dotCount.y', 0, 300, 1, DEFAULT_PARAMS.dotCount[1],
+    //     () => params.dotCount[1], v => { params.dotCount[1] = v; });
+    // addSlider('rMax', 0, 100, 1, DEFAULT_PARAMS.rMax,
+    //     () => params.rMax, v => { params.rMax = v; }, scaledRadius);
+    // addSlider('rMin', 0, 100, 1, DEFAULT_PARAMS.rMin,
+    //     () => params.rMin, v => { params.rMin = v; }, scaledRadius);
+    // addSlider('sumThresholdMin', 0, 5, 0.01, DEFAULT_PARAMS.sumThresholdMin,
+    //     () => params.sumThresholdMin, v => { params.sumThresholdMin = v; });
+    // addSlider('sumThresholdMax', 0, 5, 0.01, DEFAULT_PARAMS.sumThresholdMax,
+    //     () => params.sumThresholdMax, v => { params.sumThresholdMax = v; });
+    // addSlider('saturation.r', 0, 1, 0.01, DEFAULT_PARAMS.saturation[0],
+    //     () => params.saturation[0], v => { params.saturation[0] = v; });
+    // addSlider('saturation.g', 0, 1, 0.01, DEFAULT_PARAMS.saturation[1],
+    //     () => params.saturation[1], v => { params.saturation[1] = v; });
+    // addSlider('saturation.b', 0, 1, 0.01, DEFAULT_PARAMS.saturation[2],
+    //     () => params.saturation[2], v => { params.saturation[2] = v; });
+    // addColorPicker('backgroundColor', DEFAULT_PARAMS.backgroundColor,
+    //     () => params.backgroundColor, v => { params.backgroundColor = v; });
+    // addColorPicker('dotColor', DEFAULT_PARAMS.dotColor,
+    //     () => params.dotColor, v => { params.dotColor = v; });
 
     panel.appendChild(header);
     panel.appendChild(content);
@@ -326,13 +340,13 @@ async function main() {
 
     const [vertSrc, circlesSrc, outputSrc] = await Promise.all([
         fetchShader('shaders/passthrough.vert'),
-        fetchShader('shaders/metaball_renderer.frag'),
+        fetchShader('shaders/halftone.frag'),
         fetchShader('shaders/output.frag'),
     ]);
 
-    const smileVideo = createVideoElement('jump_test.mp4');
-    await smileVideo.play().catch(() => {});
-    const smileTexture = createVideoTexture(gl);
+    const video = createVideoElement('jump_test.mp4');
+    await video.play().catch(() => {});
+    const videoTexture = createVideoTexture(gl);
 
     const circlesProgram = createProgram(gl, vertSrc, circlesSrc);
     const outputProgram = createProgram(gl, vertSrc, outputSrc);
@@ -375,10 +389,10 @@ async function main() {
 
         if (playState.playing !== wasPlaying) {
             wasPlaying = playState.playing;
-            if (playState.playing) smileVideo.play().catch(() => {});
-            else smileVideo.pause();
+            if (playState.playing) video.play().catch(() => {});
+            else video.pause();
         }
-        smileVideo.playbackRate = params.speed || 0.0625;
+        video.playbackRate = params.speed || 0.0625;
 
         const time = animTime / 1000;
         const { fbo, texture } = currentFBO;
@@ -393,8 +407,8 @@ async function main() {
         gl.uniform1f(gl.getUniformLocation(circlesProgram, 'u_time'), time);
         gl.uniform2f(gl.getUniformLocation(circlesProgram, 'u_resolution'), width, height);
         gl.activeTexture(gl.TEXTURE1);
-        updateVideoTexture(gl, smileTexture, smileVideo);
-        gl.uniform1i(gl.getUniformLocation(circlesProgram, 'u_smile'), 1);
+        updateVideoTexture(gl, videoTexture, video);
+        gl.uniform1i(gl.getUniformLocation(circlesProgram, 'u_videoFrame'), 1);
         
         gl.uniform2i(gl.getUniformLocation(circlesProgram,'u_dotCount'),params.dotCount[0],params.dotCount[1]);
         gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_rMax'),params.rMax);
@@ -404,6 +418,11 @@ async function main() {
         gl.uniform3f(gl.getUniformLocation(circlesProgram,'u_saturation'),params.saturation[0],params.saturation[1],params.saturation[2]);
         gl.uniform3f(gl.getUniformLocation(circlesProgram,'u_backgroundColor'),params.backgroundColor[0],params.backgroundColor[1],params.backgroundColor[2]);
         gl.uniform3f(gl.getUniformLocation(circlesProgram,'u_dotColor'),params.dotColor[0],params.dotColor[1],params.dotColor[2]);
+
+        gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_cellSize'),params.cellSize);
+        gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_maxDotSizeInCell'),params.maxDotSizeInCell);
+        gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_minDotSizeInCell'),params.minDotSizeInCell);
+
 
         gl.drawArrays(gl.TRIANGLES, 0, 6);
         

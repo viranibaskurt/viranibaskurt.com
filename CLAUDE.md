@@ -12,3 +12,7 @@ Plain static HTML/CSS/JS, no build tools, no bundlers, no npm. Structure is subj
 - No frameworks, no transpilation — vanilla ES6+ in the browser.
 - Shaders use WebGL 1 / GLSL ES 1.00 (`precision highp float`, `texture2D`, `gl_FragColor`).
 - Nav is injected via `nav.js` into every page using `document.body.prepend(nav)`.
+
+## Learner
+
+The user is learning shaders. Read `LEARNER_PROFILE.md` before teaching or pairing on shader work.
