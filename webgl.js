@@ -344,7 +344,7 @@ async function main() {
         fetchShader('shaders/output.frag'),
     ]);
 
-    const video = createVideoElement('jump_test.mp4');
+    const video = createVideoElement('jump_test_color_black.mp4');
     await video.play().catch(() => {});
     const videoTexture = createVideoTexture(gl);
 
