@@ -89,6 +89,7 @@ const DEFAULT_PARAMS = {
     cellSize:100,
     minDotSizeInCell:0.1,
     maxDotSizeInCell:0.5,
+    k:40,
 };
 
 function loadParams() {
@@ -297,6 +298,9 @@ function createDebugPanel(params, playState) {
     addSlider('maxDotSizeInCell',0,1,0.1,DEFAULT_PARAMS.maxDotSizeInCell,
         ()=> params.maxDotSizeInCell,v=>{params.maxDotSizeInCell=v;}
     )
+    addSlider('k',1,80,1,DEFAULT_PARAMS.k,
+        ()=> params.k,v=>{params.k=v;}
+    )
 
 
     // addSlider('dotCount.x', 0, 300, 1, DEFAULT_PARAMS.dotCount[0],
@@ -344,7 +348,7 @@ async function main() {
         fetchShader('shaders/output.frag'),
     ]);
 
-    const video = createVideoElement('jump_test_color_black.mp4');
+    const video = createVideoElement('IMG_0665_extracted.mp4');
     await video.play().catch(() => {});
     const videoTexture = createVideoTexture(gl);
 
@@ -422,6 +426,8 @@ async function main() {
         gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_cellSize'),params.cellSize);
         gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_maxDotSizeInCell'),params.maxDotSizeInCell);
         gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_minDotSizeInCell'),params.minDotSizeInCell);
+        gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_k'),params.k);
+
 
 
         gl.drawArrays(gl.TRIANGLES, 0, 6);

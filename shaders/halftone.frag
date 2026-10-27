@@ -15,6 +15,7 @@ uniform float u_minDotSizeInCell;
 uniform vec3 u_backgroundColor;
 uniform vec3 u_dotColor;
 uniform sampler2D u_videoFrame;
+uniform float u_k;
 
 #define PI 3.14159
 
@@ -28,6 +29,11 @@ float circle(vec2 center, vec2 Pt, float r)
     float highEnd=pow(r+edge,2.0);
 
     return 1.0- smoothstep(lowEnd,highEnd,d);
+}
+
+float signedDistance(vec2 center, vec2 Pt,float r)
+{
+    return length(Pt-center)-r;
 }
 
 mat2 rotate2D(float angle)
@@ -44,24 +50,41 @@ void main(){
     float ratio = uv.x/uv.y;
     vec2 uvRatio= uv * vec2(ratio,1.0);
 
-    vec2 currentGrid=floor(turnedFragCoord.xy /vec2(u_cellSize)); //which box I'm in, in pixel
-
+    vec3 blendColor = vec3(0.0);
+    float smoothMin=10000.0;
     vec2 correctedGrid=floor((turnedFragCoord.xy) /vec2(u_cellSize)); //when the pixel is shifted, it starts to be treated as in then next grid
-    vec2 center=correctedGrid*vec2(u_cellSize) + vec2(u_cellSize)*0.5; //in pixel
     
 
-    vec2 textureCenter=rotate2D(-rotation) * center ; // cancel rotation to read the texture
-    vec2 centerUv = (textureCenter.xy/u_resolution.xy);
-    vec2 centerUvFlipped = vec2(centerUv.x,1.0-centerUv.y);
-    vec3 videoFrame = texture2D(u_videoFrame,centerUvFlipped).rgb;
-    float sizeByLuma =dot(luma,videoFrame); // eyes are sensitive to g most, then r and b. so make g pixels bigger
+    for(int x = -1; x<=1; ++x)
+    {
+        for(int y = -1; y<=1; ++y)
+        {
+            vec2 currentCenter=correctedGrid+vec2(float(x),float(y));
+            vec2 center=currentCenter*vec2(u_cellSize) + vec2(u_cellSize)*0.5; //in pixel
+            vec2 textureCenter=rotate2D(-rotation) * center ; // cancel rotation to read the texture
+            vec2 centerUv = (textureCenter.xy/u_resolution.xy);
+            vec2 centerUvFlipped = vec2(centerUv.x,1.0-centerUv.y);
+            vec3 videoFrame = texture2D(u_videoFrame,centerUvFlipped).rgb;
+            float sizeByLuma =dot(luma,videoFrame); // eyes are sensitive to g most, then r and b. so make g pixels bigger
 
-    float r =mix(u_minDotSizeInCell ,u_maxDotSizeInCell ,sizeByLuma) * u_cellSize;
+            float r =mix(u_minDotSizeInCell ,u_maxDotSizeInCell ,sizeByLuma) * u_cellSize;
+            float signedDist=signedDistance(center,turnedFragCoord.xy,r);
+        
+            float difference= signedDist-smoothMin;
+            float share = clamp(((difference / u_k) * 0.5)+0.5,0.0,1.0);
+            float blend = (1.0-share) * signedDist + share * smoothMin;
+            float bonus = u_k * share * (1.0-share);
+            smoothMin=min(smoothMin,blend-bonus);
 
-    //float r = u_maxDotSizeInCell * u_cellSize; //if you need to cancel reading the texture
+            blendColor=mix(blendColor,videoFrame,1.0-share);
 
-    float c=circle(center,turnedFragCoord.xy,r);
-    vec3 finalColor= c * videoFrame;
+
+        }
+    }
+
+    float mask = 1.0-smoothstep(0.0, 1.0,smoothMin);
+
+    vec3 finalColor = blendColor*mask ;
 
     gl_FragColor = vec4(finalColor, 1.0);
 }
