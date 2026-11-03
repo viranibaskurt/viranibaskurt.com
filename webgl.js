@@ -428,6 +428,7 @@ async function main() {
         gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_minDotSizeInCell'),params.minDotSizeInCell);
         gl.uniform1f(gl.getUniformLocation(circlesProgram,'u_k'),params.k);
 
+        gl.uniform2f(gl.getUniformLocation(circlesProgram,'u_videoSize'),video.videoWidth,video.videoHeight);
 
 
         gl.drawArrays(gl.TRIANGLES, 0, 6);

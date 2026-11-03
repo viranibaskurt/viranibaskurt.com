@@ -16,6 +16,7 @@ uniform vec3 u_backgroundColor;
 uniform vec3 u_dotColor;
 uniform sampler2D u_videoFrame;
 uniform float u_k;
+uniform vec2 u_videoSize;
 
 #define PI 3.14159
 
@@ -47,13 +48,15 @@ void main(){
     vec2 pivot= vec2(0.0);
     vec2 turnedFragCoord=rotate2D(rotation)*(gl_FragCoord.xy-pivot); //rotate 45 degrees
     vec2 uv = turnedFragCoord.xy / u_resolution.xy;
-    float ratio = uv.x/uv.y;
-    vec2 uvRatio= uv * vec2(ratio,1.0);
+    float ratio = u_resolution.x/u_resolution.y;
 
     vec3 blendColor = vec3(0.0);
     float smoothMin=10000.0;
     vec2 correctedGrid=floor((turnedFragCoord.xy) /vec2(u_cellSize)); //when the pixel is shifted, it starts to be treated as in then next grid
     
+    float videoRatio=u_videoSize.x/u_videoSize.y; //if the video taller in shape, then y needs to be scaled
+    vec2 videoUv=uv * vec2(videoRatio,1.0);
+    vec2 canvasAndVideoRatio=vec2(videoRatio/ratio,1.0);
 
     for(int x = -1; x<=1; ++x)
     {
@@ -63,8 +66,11 @@ void main(){
             vec2 center=currentCenter*vec2(u_cellSize) + vec2(u_cellSize)*0.5; //in pixel
             vec2 textureCenter=rotate2D(-rotation) * center ; // cancel rotation to read the texture
             vec2 centerUv = (textureCenter.xy/u_resolution.xy);
-            vec2 centerUvFlipped = vec2(centerUv.x,1.0-centerUv.y);
-            vec3 videoFrame = texture2D(u_videoFrame,centerUvFlipped).rgb;
+            vec2 centerUvFlipped =(vec2(-0.5,0.0) + vec2(centerUv.x,1.0-centerUv.y) )/canvasAndVideoRatio +vec2(0.5,0.0) ;
+            vec2 textureBorders = (step(vec2(0.0),centerUvFlipped) *( 1.0- step(vec2(1.0),centerUvFlipped)));
+            float isInside=textureBorders.x*textureBorders.y; //so the color out of the video is not changed.
+
+            vec3 videoFrame = texture2D(u_videoFrame,centerUvFlipped ).rgb * vec3(isInside);
             float sizeByLuma =dot(luma,videoFrame); // eyes are sensitive to g most, then r and b. so make g pixels bigger
 
             float r =mix(u_minDotSizeInCell ,u_maxDotSizeInCell ,sizeByLuma) * u_cellSize;
